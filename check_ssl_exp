@@ -1,0 +1,70 @@
+#!/usr/bin/python
+# Author: Deniss 'drewoko' Gubanov
+
+import subprocess
+import sys
+from datetime import datetime
+
+months = {
+    'Jan': 1,
+    'Feb': 2,
+    'Mar': 3,
+    'Apr': 4,
+    'May': 5,
+    'Jun': 6,
+    'Jul': 7,
+    'Aug': 8,
+    'Sep': 9,
+    'Oct': 10,
+    'Nov': 11,
+    'Dec': 12
+}
+
+if len(sys.argv) == 1:
+    print "USAGE EXAMPLE: check_ssl_exp $HOST $WARNING \n" \
+          "$HOST - domain that we planning to check \n" \
+          "$WARNING - days before ssl certificate expiration and warning notification throwing (Default: 3)"
+    sys.exit(-1)
+
+host = sys.argv[1].strip().replace("https://", "").replace("http://", "")
+
+if len(sys.argv) == 3:
+    warningDays = int(sys.argv[2])
+else:
+    warningDays = 3
+
+present = datetime.now()
+
+out = subprocess.Popen(
+    "echo | openssl s_client -connect " + host + ":443 -servername " + host + " 2>/dev/null | openssl x509 -noout -dates",
+    shell=True, stdout=subprocess.PIPE
+)
+
+outputText = ""
+
+for line in out.stdout.readlines():
+    outputText += line
+
+expDate = " ".join(outputText.split()).split("notAfter=")[1]
+
+expDateSplit = expDate.split(" ")
+
+month = int(months.get(expDateSplit[0]))
+day = int(expDateSplit[1])
+year = int(expDateSplit[3])
+
+dateSplit = expDateSplit[2].split(":")
+
+certDate = datetime(year, month, day, int(dateSplit[0]), int(dateSplit[1]), int(dateSplit[2]))
+
+delta = certDate - present
+
+if delta.days < 1:
+    print "SSL CRITICAL: SSL '" + host + "' certificate expired " + str(delta.days) + " days ago"
+    sys.exit(2)
+elif 1 >= delta.days < warningDays:
+    print "SSL WARNING: SSL '" + host + "' certificate will expire in " + str(delta.days) + " days"
+    sys.exit(1)
+else:
+    print "SSL OK: SSL '" + host + "' certificate will expire in " + str(delta.days) + " days"
+    sys.exit(0)
